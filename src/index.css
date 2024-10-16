@@ -1,0 +1,62 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+/* Add custom styles for the code editor */
+.prism-editor__textarea:focus {
+  outline: none;
+}
+
+/* Customize Prism.js theme */
+.token.tag {
+  color: #905;
+}
+
+.token.attr-name {
+  color: #690;
+}
+
+.token.attr-value {
+  color: #07a;
+}
+
+.token.string {
+  color: #690;
+}
+
+/* Ensure the editor takes full width and height */
+.prism-editor__container {
+  width: 100% !important;
+  height: 100% !important;
+}
+
+/* Improve editor appearance */
+.prism-editor__textarea,
+.prism-editor__editor {
+  min-height: 16rem !important;
+  height: 100% !important;
+  white-space: pre-wrap !important;
+  word-break: keep-all !important;
+}
+
+/* Ensure proper cursor positioning */
+.prism-editor__line-numbers {
+  display: none;
+}
+
+.prism-editor__textarea {
+  caret-color: black;
+  position: absolute !important;
+  top: 0 !important;
+  left: 0 !important;
+  height: 100% !important;
+  width: 100% !important;
+  resize: none !important;
+  overflow-y: auto !important;
+  padding: inherit !important;
+}
+
+/* Ensure scrollbar is always visible */
+.prism-editor__container {
+  overflow-y: scroll !important;
+}
