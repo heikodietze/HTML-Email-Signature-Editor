@@ -139,6 +139,33 @@ async function initApp() {
         const beautifyBtn = document.getElementById('beautifyBtn');
         const saveBtn = document.getElementById('saveBtn');
         const loadBtn = document.getElementById('loadBtn');
+        const syncBtn = document.getElementById('syncBtn');
+
+        // Sync-Button Status aktualisieren
+        function updateSyncButton() {
+            if (!window.storageManager) return;
+            const pendingChanges = window.storageManager.syncQueue.length;
+            syncBtn.disabled = pendingChanges === 0;
+            syncBtn.innerHTML = `Sync ${pendingChanges > 0 ? `(${pendingChanges})` : ''}`;
+        }
+
+        // Initial Sync-Button Status
+        updateSyncButton();
+
+        // Sync-Button Event Listener
+        syncBtn.addEventListener('click', async () => {
+            setButtonLoading(syncBtn, true);
+            try {
+                await window.storageManager.syncQueuedChanges();
+                showToast('Synchronisierung erfolgreich', 'success');
+            } catch (error) {
+                console.error('Sync error:', error);
+                showToast('Fehler bei der Synchronisierung', 'error');
+            } finally {
+                setButtonLoading(syncBtn, false);
+                updateSyncButton();
+            }
+        });
 
         beautifyBtn.addEventListener('click', async () => {
             setButtonLoading(beautifyBtn, true);

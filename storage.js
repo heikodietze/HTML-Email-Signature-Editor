@@ -12,15 +12,26 @@ class StorageManager {
         });
     }
 
-    // Status-Indikator aktualisieren
-    updateStatusIndicator() {
-        if (!this.statusIndicator) return;
-        
-        this.statusIndicator.className = `status-indicator ${this.isOnline ? 'status-online' : 'status-offline'}`;
-        this.statusIndicator.innerHTML = `
-            ${this.isOnline ? 'Online' : 'Offline'}
-            ${this.syncQueue.length > 0 ? `(${this.syncQueue.length} pending)` : ''}
-        `;
+    // UI-Status aktualisieren
+    updateUI() {
+        // Status-Indikator aktualisieren
+        if (this.statusIndicator) {
+            this.statusIndicator.className = `status-indicator ${this.isOnline ? 'status-online' : 'status-offline'}`;
+            this.statusIndicator.innerHTML = `
+                ${this.isOnline ? 'Online' : 'Offline'}
+                ${this.syncQueue.length > 0 ? `(${this.syncQueue.length} pending)` : ''}
+            `;
+        }
+
+        // Sync-Button aktualisieren
+        if (typeof window.updateSyncButton === 'function') {
+            window.updateSyncButton();
+        }
+
+        // Debug-Information
+        if (this.syncQueue.length > 0) {
+            console.log('Ausstehende Änderungen:', this.syncQueue);
+        }
     }
 
     // Initialisierung
@@ -29,7 +40,7 @@ class StorageManager {
         if (!window.supabaseClient) {
             console.error('StorageManager: Supabase Client nicht verfügbar');
             this.isOnline = false;
-            this.updateStatusIndicator();
+            this.updateUI();
             return;
         }
 
@@ -43,7 +54,9 @@ class StorageManager {
             this.initialized = true;
             console.log('StorageManager: Initialisierung abgeschlossen, Online:', this.isOnline);
             
+            // Versuche sofort zu synchronisieren
             if (this.isOnline && this.syncQueue.length > 0) {
+                console.log('Versuche ausstehende Änderungen zu synchronisieren...');
                 await this.syncQueuedChanges();
             }
         } catch (error) {
@@ -51,7 +64,15 @@ class StorageManager {
             this.isOnline = false;
         }
         
-        this.updateStatusIndicator();
+        this.updateUI();
+
+        // Regelmäßige Synchronisierung
+        setInterval(() => {
+            if (this.isOnline && this.syncQueue.length > 0) {
+                console.log('Automatische Synchronisierung...');
+                this.syncQueuedChanges();
+            }
+        }, 5000); // Alle 5 Sekunden
     }
 
     // Verbindungsstatus prüfen
@@ -74,6 +95,7 @@ class StorageManager {
 
         try {
             if (await this.checkConnection()) {
+                console.log('Speichere Template direkt in Supabase...');
                 const { data, error } = await window.supabaseClient
                     .from('templates')
                     .upsert([templateData], {
@@ -89,8 +111,9 @@ class StorageManager {
             }
         } catch (error) {
             console.error('Fehler beim Speichern:', error);
+            console.log('Füge Änderung zur Warteschlange hinzu...');
             this.queueChange('save', templateData);
-            this.updateStatusIndicator();
+            this.updateUI();
         }
 
         // Fallback: Lokale Speicherung
@@ -207,6 +230,7 @@ class StorageManager {
         });
         localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
         this.updateStatusIndicator();
+        console.log(`Änderung zur Warteschlange hinzugefügt (${action}):`, data);
     }
 
     // Warteschlange synchronisieren
@@ -216,8 +240,12 @@ class StorageManager {
         const queue = JSON.parse(localStorage.getItem('syncQueue') || '[]');
         const newQueue = [];
 
+        console.log(`Starte Synchronisierung von ${queue.length} Änderungen...`);
+
         for (const item of queue) {
             try {
+                console.log(`Verarbeite ${item.action} für:`, item.data);
+                
                 if (item.action === 'save') {
                     const { error } = await window.supabaseClient
                         .from('templates')
@@ -225,22 +253,27 @@ class StorageManager {
                             onConflict: 'name'
                         });
                     if (error) throw error;
+                    console.log('Speichern erfolgreich');
                 } else if (item.action === 'delete') {
                     const { error } = await window.supabaseClient
                         .from('templates')
                         .delete()
                         .eq('name', item.data.name);
                     if (error) throw error;
+                    console.log('Löschen erfolgreich');
                 }
             } catch (error) {
                 console.error('Fehler bei der Synchronisation:', error);
+                console.log('Behalte Änderung in der Warteschlange');
                 newQueue.push(item);
             }
         }
 
         this.syncQueue = newQueue;
         localStorage.setItem('syncQueue', JSON.stringify(newQueue));
-        this.updateStatusIndicator();
+        this.updateUI();
+        
+        console.log(`Synchronisierung abgeschlossen. ${newQueue.length} Änderungen verbleiben in der Warteschlange.`);
     }
 }
 
