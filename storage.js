@@ -205,17 +205,114 @@ class StorageManager {
     }
 
     // Template als HTML-Datei exportieren
-    exportTemplate(name, content) {
-        const blob = new Blob([content], { type: 'text/html;charset=utf-8' });
-        const url = window.URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `${name}.html`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        window.URL.revokeObjectURL(url);
-        return { success: true, status: 'Template exportiert' };
+    async exportTemplate(name, content) {
+        try {
+            console.log('Starte Export-Prozess...');
+
+            // HTML-Datei mit vollständigem Markup erstellen
+            const fullContent = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE html PUBLIC "-//W3C//DTD XHTML 1.0 Transitional//EN" "http://www.w3.org/TR/xhtml1/DTD/xhtml1-transitional.dtd">
+<html xmlns="http://www.w3.org/1999/xhtml">
+<head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8" />
+    <title>${name}</title>
+</head>
+<body>
+${content}
+</body>
+</html>`;
+
+            // Prüfe, ob wir die File System Access API verwenden können
+            const isSecureContext = window.isSecureContext;
+            const isLocalhost = window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1';
+            const hasFileSystemAccess = 'showSaveFilePicker' in window;
+
+            // Detaillierte Kontext-Informationen
+            const contextInfo = {
+                isSecureContext,
+                isLocalhost,
+                hasFileSystemAccess,
+                protocol: window.location.protocol,
+                hostname: window.location.hostname,
+                href: window.location.href
+            };
+            console.log('Export-Kontext:', JSON.stringify(contextInfo, null, 2));
+            console.log('Verwende ' + (hasFileSystemAccess && (isSecureContext || isLocalhost) ? 
+                'File System Access API (nativer Datei-Dialog)' : 
+                'Download API (Browser-Dialog)'));
+
+            if (hasFileSystemAccess && (isSecureContext || isLocalhost)) {
+                console.log('Öffne nativen Datei-Dialog...');
+                
+                // Konfiguriere den Datei-Picker
+                const options = {
+                    suggestedName: `${name}.html`,
+                    types: [{
+                        description: 'HTML-Datei',
+                        accept: {
+                            'text/html': ['.html']
+                        }
+                    }],
+                    excludeAcceptAllOption: false
+                };
+
+                try {
+                    // Öffne den nativen Datei-Dialog
+                    const handle = await window.showSaveFilePicker(options);
+                    console.log('Datei ausgewählt:', handle.name);
+                    
+                    // Schreibe den Inhalt in die ausgewählte Datei
+                    const writable = await handle.createWritable();
+                    await writable.write(fullContent);
+                    await writable.close();
+                    
+                    console.log('Export erfolgreich abgeschlossen');
+                    return { success: true, status: 'Template exportiert' };
+                } catch (error) {
+                    if (error.name === 'AbortError') {
+                        console.log('Export abgebrochen');
+                        return { success: false, status: 'Export abgebrochen' };
+                    }
+                    throw error;
+                }
+            } else {
+                console.log('Verwende Browser-Download-Dialog...');
+                const blob = new Blob([fullContent], { type: 'text/html;charset=utf-8' });
+                const url = window.URL.createObjectURL(blob);
+                
+                // Download-Link erstellen
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = `${name}.html`;
+                document.body.appendChild(a);
+                
+                // Dialog zum Speicherort anzeigen
+                const userChoice = confirm(
+                    'Möchten Sie die Datei speichern?\n\n' +
+                    'Hinweis: Da Sie nicht über HTTPS oder localhost zugreifen, ' +
+                    'wird der Standard-Download-Dialog Ihres Browsers verwendet.'
+                );
+
+                if (userChoice) {
+                    a.click();
+                    console.log('Export erfolgreich abgeschlossen (Browser-Download)');
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 100);
+                    return { success: true, status: 'Template exportiert' };
+                } else {
+                    console.log('Export abgebrochen (Browser-Download)');
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                    return { success: false, status: 'Export abgebrochen' };
+                }
+            }
+        } catch (error) {
+            console.error('Fehler beim Exportieren:', error);
+            return { success: false, status: 'Fehler beim Exportieren' };
+        }
     }
 
     // Lokale Speicherung

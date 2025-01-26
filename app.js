@@ -196,12 +196,10 @@ async function initApp() {
         exportBtn.addEventListener('click', async () => {
             setButtonLoading(exportBtn, true);
             try {
-                const name = prompt('Dateinamen eingeben:');
-                if (name) {
-                    const content = editor.getValue();
-                    const result = window.storageManager.exportTemplate(name, content);
-                    showToast(result.status, result.success ? 'success' : 'error');
-                }
+                const content = editor.getValue();
+                const templateName = document.title || 'signature';
+                const result = await window.storageManager.exportTemplate(templateName, content);
+                showToast(result.status, result.success ? 'success' : 'warning');
             } catch (error) {
                 console.error('Fehler beim Exportieren:', error);
                 showToast('Fehler beim Exportieren', 'error');
