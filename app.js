@@ -36,6 +36,20 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// Button Loading State
+function setButtonLoading(button, isLoading) {
+    if (isLoading) {
+        button.disabled = true;
+        const spinner = document.createElement('span');
+        spinner.className = 'loading-spinner';
+        button.prepend(spinner);
+    } else {
+        button.disabled = false;
+        const spinner = button.querySelector('.loading-spinner');
+        if (spinner) button.removeChild(spinner);
+    }
+}
+
 // Initialize Monaco Editor
 function initMonaco() {
     try {
@@ -85,7 +99,6 @@ function initMonaco() {
         // Set up real-time preview
         editor.onDidChangeModelContent(() => {
             updatePreview();
-            showToast('Vorschau aktualisiert', 'info');
         });
 
         return true;
@@ -123,19 +136,37 @@ async function initApp() {
         updatePreview();
 
         // Set up button event listeners
-        document.getElementById('beautifyBtn').addEventListener('click', () => {
-            beautifyCode();
-            showToast('Code formatiert', 'success');
-        });
-        document.getElementById('saveBtn').addEventListener('click', () => {
-            saveTemplate();
-            showToast('Template gespeichert', 'success');
-        });
-        document.getElementById('loadBtn').addEventListener('click', loadTemplates);
+        const beautifyBtn = document.getElementById('beautifyBtn');
+        const saveBtn = document.getElementById('saveBtn');
+        const loadBtn = document.getElementById('loadBtn');
 
-        // Check storage connection
-        const isOnline = await storageManager.checkConnection();
-        showToast(`Storage: ${isOnline ? 'Online' : 'Offline'}`, isOnline ? 'success' : 'info');
+        beautifyBtn.addEventListener('click', async () => {
+            setButtonLoading(beautifyBtn, true);
+            try {
+                beautifyCode();
+                showToast('Code formatiert', 'success');
+            } finally {
+                setButtonLoading(beautifyBtn, false);
+            }
+        });
+
+        saveBtn.addEventListener('click', async () => {
+            setButtonLoading(saveBtn, true);
+            try {
+                await saveTemplate();
+            } finally {
+                setButtonLoading(saveBtn, false);
+            }
+        });
+
+        loadBtn.addEventListener('click', async () => {
+            setButtonLoading(loadBtn, true);
+            try {
+                await loadTemplates();
+            } finally {
+                setButtonLoading(loadBtn, false);
+            }
+        });
 
     } catch (error) {
         console.error('Initialization error:', error);
@@ -228,17 +259,34 @@ async function saveTemplate() {
 // Load templates
 async function loadTemplates() {
     const templatesList = document.getElementById('templatesList');
-    templatesList.innerHTML = '';
+    templatesList.innerHTML = '<div class="text-center"><span class="loading-spinner"></span> Lade Templates...</div>';
 
     try {
         const templates = await window.storageManager.loadAllTemplates();
+        templatesList.innerHTML = '';
+
+        if (templates.length === 0) {
+            templatesList.innerHTML = '<div class="text-center text-muted">Keine Templates gefunden</div>';
+            return;
+        }
+
         templates.forEach(template => {
             const item = document.createElement('button');
             item.className = 'list-group-item list-group-item-action';
-            item.textContent = template.name;
+            item.innerHTML = `
+                <div>
+                    <strong>${template.name}</strong>
+                    <div class="template-info">
+                        Kategorie: ${template.category}
+                        ${template.tags?.length ? `• Tags: ${template.tags.join(', ')}` : ''}
+                        • Zuletzt bearbeitet: ${new Date(template.updated_at).toLocaleString()}
+                    </div>
+                </div>
+            `;
+            
             item.addEventListener('click', async () => {
                 try {
-                    const fullTemplate = await storageManager.loadTemplate(template.name);
+                    const fullTemplate = await window.storageManager.loadTemplate(template.name);
                     if (fullTemplate) {
                         editor.setValue(fullTemplate.content);
                         templatesModal.hide();
@@ -250,11 +298,13 @@ async function loadTemplates() {
                     showToast('Fehler beim Laden des Templates', 'error');
                 }
             });
+            
             templatesList.appendChild(item);
         });
     } catch (error) {
         console.error('Fehler beim Laden der Templates:', error);
         showToast('Fehler beim Laden der Templates', 'error');
+        templatesList.innerHTML = '<div class="text-center text-danger">Fehler beim Laden der Templates</div>';
     }
     
     templatesModal.show();

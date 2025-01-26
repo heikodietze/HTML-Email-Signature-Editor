@@ -3,6 +3,7 @@ class StorageManager {
         this.isOnline = false;
         this.syncQueue = [];
         this.initialized = false;
+        this.statusIndicator = document.getElementById('statusIndicator');
         
         // Warte auf DOMContentLoaded und Supabase-Initialisierung
         document.addEventListener('DOMContentLoaded', () => {
@@ -11,12 +12,24 @@ class StorageManager {
         });
     }
 
+    // Status-Indikator aktualisieren
+    updateStatusIndicator() {
+        if (!this.statusIndicator) return;
+        
+        this.statusIndicator.className = `status-indicator ${this.isOnline ? 'status-online' : 'status-offline'}`;
+        this.statusIndicator.innerHTML = `
+            ${this.isOnline ? 'Online' : 'Offline'}
+            ${this.syncQueue.length > 0 ? `(${this.syncQueue.length} pending)` : ''}
+        `;
+    }
+
     // Initialisierung
     async init() {
         console.log('StorageManager: Initialisierung...');
         if (!window.supabaseClient) {
             console.error('StorageManager: Supabase Client nicht verfügbar');
             this.isOnline = false;
+            this.updateStatusIndicator();
             return;
         }
 
@@ -37,6 +50,8 @@ class StorageManager {
             console.error('StorageManager: Initialisierungsfehler:', error);
             this.isOnline = false;
         }
+        
+        this.updateStatusIndicator();
     }
 
     // Verbindungsstatus prüfen
@@ -75,6 +90,7 @@ class StorageManager {
         } catch (error) {
             console.error('Fehler beim Speichern:', error);
             this.queueChange('save', templateData);
+            this.updateStatusIndicator();
         }
 
         // Fallback: Lokale Speicherung
@@ -144,10 +160,12 @@ class StorageManager {
                 if (error) throw error;
             } else {
                 this.queueChange('delete', { name });
+                this.updateStatusIndicator();
             }
         } catch (error) {
             console.error('Fehler beim Löschen:', error);
             this.queueChange('delete', { name });
+            this.updateStatusIndicator();
         }
 
         // Aus lokalem Speicher entfernen
@@ -188,6 +206,7 @@ class StorageManager {
             timestamp: new Date().toISOString()
         });
         localStorage.setItem('syncQueue', JSON.stringify(this.syncQueue));
+        this.updateStatusIndicator();
     }
 
     // Warteschlange synchronisieren
@@ -221,6 +240,7 @@ class StorageManager {
 
         this.syncQueue = newQueue;
         localStorage.setItem('syncQueue', JSON.stringify(newQueue));
+        this.updateStatusIndicator();
     }
 }
 
