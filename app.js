@@ -89,11 +89,9 @@ function initMonaco() {
         // Additional keyboard shortcuts
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => {
             saveTemplate();
-            showToast('Template gespeichert', 'success');
         });
         editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyB, () => {
             beautifyCode();
-            showToast('Code formatiert', 'success');
         });
 
         // Set up real-time preview
@@ -135,63 +133,80 @@ async function initApp() {
         // Initial preview update
         updatePreview();
 
-        // Set up button event listeners
+        // Set up buttons
         const beautifyBtn = document.getElementById('beautifyBtn');
         const saveBtn = document.getElementById('saveBtn');
         const loadBtn = document.getElementById('loadBtn');
-        const syncBtn = document.getElementById('syncBtn');
+        
+        // Add Export Button
+        const exportBtn = document.createElement('button');
+        exportBtn.id = 'exportBtn';
+        exportBtn.className = 'btn btn-outline-light me-2';
+        exportBtn.textContent = 'Export';
+        exportBtn.title = 'Als HTML-Datei exportieren';
+        document.querySelector('.d-flex').insertBefore(exportBtn, document.getElementById('statusIndicator'));
 
-        // Sync-Button Status aktualisieren
-        function updateSyncButton() {
-            if (!window.storageManager) return;
-            const pendingChanges = window.storageManager.syncQueue.length;
-            syncBtn.disabled = pendingChanges === 0;
-            syncBtn.innerHTML = `Sync ${pendingChanges > 0 ? `(${pendingChanges})` : ''}`;
-        }
-
-        // Initial Sync-Button Status
-        updateSyncButton();
-
-        // Sync-Button Event Listener
-        syncBtn.addEventListener('click', async () => {
-            setButtonLoading(syncBtn, true);
-            try {
-                await window.storageManager.syncQueuedChanges();
-                showToast('Synchronisierung erfolgreich', 'success');
-            } catch (error) {
-                console.error('Sync error:', error);
-                showToast('Fehler bei der Synchronisierung', 'error');
-            } finally {
-                setButtonLoading(syncBtn, false);
-                updateSyncButton();
-            }
-        });
-
+        // Beautify Button
         beautifyBtn.addEventListener('click', async () => {
             setButtonLoading(beautifyBtn, true);
             try {
                 beautifyCode();
                 showToast('Code formatiert', 'success');
+            } catch (error) {
+                console.error('Fehler beim Formatieren:', error);
+                showToast('Fehler beim Formatieren', 'error');
             } finally {
                 setButtonLoading(beautifyBtn, false);
             }
         });
 
+        // Save Button
         saveBtn.addEventListener('click', async () => {
             setButtonLoading(saveBtn, true);
             try {
-                await saveTemplate();
+                const result = await saveTemplate();
+                if (result) {
+                    showToast(result.status, result.success ? 'success' : 'warning');
+                }
+            } catch (error) {
+                console.error('Fehler beim Speichern:', error);
+                showToast('Fehler beim Speichern', 'error');
             } finally {
                 setButtonLoading(saveBtn, false);
             }
         });
 
+        // Load Button
         loadBtn.addEventListener('click', async () => {
             setButtonLoading(loadBtn, true);
             try {
-                await loadTemplates();
+                const result = await loadTemplates();
+                if (result) {
+                    showToast(result.status, result.success ? 'success' : 'warning');
+                }
+            } catch (error) {
+                console.error('Fehler beim Laden:', error);
+                showToast('Fehler beim Laden', 'error');
             } finally {
                 setButtonLoading(loadBtn, false);
+            }
+        });
+
+        // Export Button
+        exportBtn.addEventListener('click', async () => {
+            setButtonLoading(exportBtn, true);
+            try {
+                const name = prompt('Dateinamen eingeben:');
+                if (name) {
+                    const content = editor.getValue();
+                    const result = window.storageManager.exportTemplate(name, content);
+                    showToast(result.status, result.success ? 'success' : 'error');
+                }
+            } catch (error) {
+                console.error('Fehler beim Exportieren:', error);
+                showToast('Fehler beim Exportieren', 'error');
+            } finally {
+                setButtonLoading(exportBtn, false);
             }
         });
 
@@ -273,14 +288,9 @@ function beautifyCode() {
 async function saveTemplate() {
     const templateName = prompt('Template-Namen eingeben:');
     if (templateName) {
-        try {
-            await window.storageManager.saveTemplate(templateName, editor.getValue());
-            showToast(`Template "${templateName}" gespeichert`, 'success');
-        } catch (error) {
-            console.error('Fehler beim Speichern:', error);
-            showToast('Fehler beim Speichern', 'error');
-        }
+        return await window.storageManager.saveTemplate(templateName, editor.getValue());
     }
+    return null;
 }
 
 // Load templates
@@ -289,15 +299,15 @@ async function loadTemplates() {
     templatesList.innerHTML = '<div class="text-center"><span class="loading-spinner"></span> Lade Templates...</div>';
 
     try {
-        const templates = await window.storageManager.loadAllTemplates();
+        const result = await window.storageManager.loadAllTemplates();
         templatesList.innerHTML = '';
 
-        if (templates.length === 0) {
+        if (!result.success || !result.data || result.data.length === 0) {
             templatesList.innerHTML = '<div class="text-center text-muted">Keine Templates gefunden</div>';
-            return;
+            return result;
         }
 
-        templates.forEach(template => {
+        result.data.forEach(template => {
             const item = document.createElement('button');
             item.className = 'list-group-item list-group-item-action';
             item.innerHTML = `
@@ -313,12 +323,14 @@ async function loadTemplates() {
             
             item.addEventListener('click', async () => {
                 try {
-                    const fullTemplate = await window.storageManager.loadTemplate(template.name);
-                    if (fullTemplate) {
-                        editor.setValue(fullTemplate.content);
+                    const loadResult = await window.storageManager.loadTemplate(template.name);
+                    if (loadResult.success && loadResult.data) {
+                        editor.setValue(loadResult.data.content);
                         templatesModal.hide();
                         updatePreview();
-                        showToast(`Template "${template.name}" geladen`, 'success');
+                        showToast(loadResult.status, 'success');
+                    } else {
+                        showToast(loadResult.status, 'error');
                     }
                 } catch (error) {
                     console.error('Fehler beim Laden:', error);
@@ -328,13 +340,14 @@ async function loadTemplates() {
             
             templatesList.appendChild(item);
         });
+        
+        templatesModal.show();
+        return result;
     } catch (error) {
         console.error('Fehler beim Laden der Templates:', error);
-        showToast('Fehler beim Laden der Templates', 'error');
         templatesList.innerHTML = '<div class="text-center text-danger">Fehler beim Laden der Templates</div>';
+        return { success: false, status: 'Fehler beim Laden der Templates' };
     }
-    
-    templatesModal.show();
 }
 
 // Default template
